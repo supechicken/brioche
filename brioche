@@ -2,18 +2,21 @@
 
 usage()
 {
-	echo ""
-	echo "Brioche: script to control lxc containers within ChromeOS."
-	echo "Usage: brioche [container name] [app, cmd, create, destroy, desktop, list-desktops, shell, stop] <extra arguments>."
-	echo "- [app] launches the GUI app with the executable name passed as extra argument (e.g. brioche [container name] app vlc)."
-	echo "- [cmd] launches the shell command specified as extra argument (e.g. brioche [container name] cmd sudo apt install vlc)."
-	echo "- [create] creates the specified lxc container."
-	echo "- [destroy] deletes the specified lxc container."
-	echo "- [desktop] launches the desktop specified as extra argument (use [list-desktops] to see which desktops are available) (e.g. brioche [container name] desktop ubuntu)."
-	echo "- [list-desktops] list the desktop sessions currently available in the lxc container (desktop sessions are located in the /usr/share/xsessions direcory)."
-	echo "- [shell] opens a console session in the lxc container."
-	echo "- [stop] stops the specified lxc container."
-	echo "To list existing containers, use \"sudo lxc-ls --fancy\"."
+cat <<HELP
+Brioche: script to control lxc containers within ChromeOS.
+Usage: brioche [container name] [app, cmd, create, destroy, desktop, list-desktops, shell, stop] <extra arguments>.
+
+- [app] launches the GUI app with the executable name passed as extra argument (e.g. brioche [container name] app vlc).
+- [cmd] launches the shell command specified as extra argument (e.g. brioche [container name] cmd sudo apt install vlc).
+- [create] creates the specified lxc container.
+- [destroy] deletes the specified lxc container.
+- [desktop] launches the desktop specified as extra argument (use [list-desktops] to see which desktops are available) (e.g. brioche [container name] desktop ubuntu).
+- [list-desktops] list the desktop sessions currently available in the lxc container (desktop sessions are located in the /usr/share/xsessions direcory).
+- [shell] opens a console session in the lxc container.
+- [stop] stops the specified lxc container.
+- [replace] link the specified lxc container to Terminal app. (required crostini installed first)
+To list existing containers, use "sudo lxc-ls --fancy".
+HELP
 }
 
 lxc_fix()
@@ -378,7 +381,8 @@ CONTAINER_COMMAND="$2"
 if [ -z "$CONTAINER_USER" ]; then CONTAINER_USER=$USER; fi
 if [ -z "$CONTAINER_GPU" ]; then CONTAINER_GPU=0; fi
 
-if [ "$CONTAINER_COMMAND" == "app" ]; then
+case ${CONTAINER_COMMAND} in
+app)
     verify_container
     init
     sudo lxc-attach -n "$CONTAINER" -- su --login $CONTAINER_USER -c "cat << COMMAND > ~/.brioche_last_app.sh
@@ -389,7 +393,8 @@ $(echo "${@:3}")
 COMMAND"
     sudo lxc-attach -n "$CONTAINER" -- su --login $CONTAINER_USER -c "chmod 0755 ~/.brioche_last_app.sh"
     sudo lxc-attach -n "$CONTAINER" -- su --login $CONTAINER_USER -c "sommelier -X --x-display=:0 --shm-driver=noop --drm-device=/dev/dri/card$CONTAINER_GPU --glamor $SOMMELIER_ARGS ~/.brioche_last_app.sh" >/dev/null 2>&1 &
-elif [ "$CONTAINER_COMMAND" == "cmd" ]; then
+    ;;
+cmd)
     verify_container
     init
     sudo lxc-attach -n "$CONTAINER" -- su --login $CONTAINER_USER -c "cat << COMMAND > ~/.brioche_last_cmd.sh
@@ -398,15 +403,18 @@ $(echo "${@:3}")
 COMMAND"
     sudo lxc-attach -n "$CONTAINER" -- su --login $CONTAINER_USER -c "chmod 0755 ~/.brioche_last_cmd.sh"
     sudo lxc-attach -n "$CONTAINER" -- su --login $CONTAINER_USER -c "~/.brioche_last_cmd.sh"
-elif [ "$CONTAINER_COMMAND" == "create" ]; then
+    ;;
+create)
     if [ -d "/usr/local/var/lib/lxc/$CONTAINER" ]; then echo "container $CONTAINER exist, use destroy command first"; exit 1; fi
     lxc_fix
     create_container
-elif [ "$CONTAINER_COMMAND" == "destroy" ]; then
+    ;;
+destroy)
     verify_container
     sudo lxc-stop -n "$CONTAINER"
     sudo lxc-destroy -n "$CONTAINER"
-elif [ "$CONTAINER_COMMAND" == "desktop" ]; then
+    ;;
+desktop)
     verify_container
     init
     if [ -z "$3" ]; then echo "desktop name cannot be empty"; exit 1; fi
@@ -419,18 +427,26 @@ xclipsync &
 COMMAND"
     sudo lxc-attach -n "$CONTAINER" -- su --login $CONTAINER_USER -c "chmod 0755 ~/.brioche_last_desktop.sh"
     sudo lxc-attach -n "$CONTAINER" -- su --login $CONTAINER_USER -c "sommelier -X --x-display=:0 --shm-driver=noop --drm-device=/dev/dri/card$CONTAINER_GPU --glamor $SOMMELIER_ARGS xinit ~/.brioche_last_desktop.sh -- /usr/bin/Xephyr -resizeable -fullscreen :1" >/dev/null 2>&1 &
-elif [ "$CONTAINER_COMMAND" == "list-desktops" ]; then
+    ;;
+list-desktops)
     verify_container
     init
     sudo lxc-attach -n "$CONTAINER" -- su --login $CONTAINER_USER -c "ls /usr/share/xsessions/*.desktop | sed 's#/usr/share/xsessions/##g' | sed 's#\.desktop##g'"
-elif [ "$CONTAINER_COMMAND" == "shell" ]; then
+    ;;
+shell)
     verify_container
     init
     sudo lxc-attach -n "$CONTAINER" -- su --login $CONTAINER_USER
-elif [ "$CONTAINER_COMMAND" == "stop" ]; then
+    ;;
+stop)
     verify_container
     sudo lxc-stop -n "$CONTAINER"
-elif [ "$CONTAINER" == "" ] || [ "$CONTAINER_COMMAND" == "" ] || [ "$CONTAINER_COMMAND" == "help" ]; then
+    ;;
+help|*)
+    usage
+    ;;
+esac
+if [ "$CONTAINER" == '' ]; then
     usage
 else
     echo "command $CONTAINER_COMMAND not found"
